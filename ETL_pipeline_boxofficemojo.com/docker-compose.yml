@@ -1,0 +1,155 @@
+services:
+  
+  #AIRFLOW
+  scheduler:
+    container_name: airflow-scheduler
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: scheduler
+    restart: on-failure
+    depends_on:
+      - postgres
+      - spark
+    ports:
+      - "8794:8793"
+    environment:
+      - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=5
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow_scheduler_logs:/opt/airflow/logs
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 2
+    networks:
+      - airflow_net
+
+  webserver:
+    container_name: airflow-webserver
+    hostname: webserver
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: webserver
+    restart: always
+    depends_on:
+      - postgres
+      - spark
+    environment:
+      - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=5
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow_webserver_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 2
+    networks:
+      - airflow_net
+
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    ports:
+      - "5434:5432"
+    networks:
+      - airflow_net
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+
+  spark:
+    image: bitnami/spark:latest
+    container_name: spark
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8081:8080"
+    networks:
+      - airflow_net
+    volumes:
+      - ./spark:/bitnami/spark
+
+  kafka:
+    image: 'bitnami/kafka'
+    container_name: kafka
+    ports:
+      - '9094:9094'
+    networks:
+      - airflow_net
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+    volumes:
+      - ./kafka:/kafka_data/
+  
+  superset:
+    container_name: superset
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_EMAIL=admin@superset.com
+      - ADMIN_PASSWORD=admin
+    ports: 
+      - '8088:8088'
+    depends_on:
+      - postgres
+    networks:
+      - airflow_net
+    volumes:
+      - ./superset:/app/superset_home
+
+  # kafka-ui:
+  #   image: provectuslabs/kafka-ui
+  #   container_name: kafka-ui
+  #   ports:
+  #     - 8000:8080
+  #   depends_on:
+  #     - kafka
+  #   environment:
+  #     KAFKA_CLUSTERS_0_NAME: local
+  #     KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: PLAINTEXT://kafka:9092
+  #     DYNAMIC_CONFIG_ENABLED: 'true'
+  #   networks:
+  #     - airflow_net
+
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: pgadmin
+  #   environment:
+  #     - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+  #     - PGADMIN_DEFAULT_PASSWORD=admin
+  #   ports:
+  #     - "5050:80"
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - airflow_net
+
+
+networks:
+  airflow_net:
+
+
+volumes:
+  airflow_scheduler_logs:
+  airflow_webserver_logs:
+  superset:
+  kafka:
+  postgres:
+  spark:

@@ -1,0 +1,8 @@
+kafka_python
+psycopg2-binary
+apache-airflow
+unidecode
+boxoffice_api
+pyspark
+pandas
+confluent_kafka
